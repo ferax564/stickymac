@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notesHidden = false
     private let mirror = MarkdownMirror()
     private var snoozeTimer: Timer?
+    private lazy var search = SearchController(store: store) { [weak self] id in self?.reveal(id) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -20,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             HotKey(keyCode: kVK_ANSI_V, modifiers: controlKey | optionKey, id: 2) { [weak self] in
                 self?.newNoteFromClipboard(atMouse: true)
+            },
+            HotKey(keyCode: kVK_ANSI_F, modifiers: controlKey | optionKey, id: 3) { [weak self] in
+                self?.search.toggle()
             },
         ].compactMap { $0 }
 
@@ -107,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         • ⌃⌥N anywhere → new note at your cursor
         • ⌃⌥V → new note from the clipboard
+        • ⌃⌥F → search all notes
         ☐ Type [] and a space for a checklist
         ☑ Click a box to tick it off
         • 💤 in the bar snoozes a note until later
@@ -214,8 +219,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func focusNote(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID, let c = controllers[id] else { return }
+        guard let id = sender.representedObject as? UUID else { return }
+        reveal(id)
+    }
+
+    @objc func searchAction(_ sender: Any?) { search.show() }
+
+    func reveal(_ id: UUID) {
+        guard let c = controllers[id] else { return }
         notesHidden = false
+        if c.model.collapsed { c.toggleCollapse() }
         if c.model.snoozedUntil != nil { c.wake(focus: true) } else { c.show(focus: true) }
     }
 
@@ -258,6 +271,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let clip = item("New Note from Clipboard", #selector(newNoteFromClipboardAction(_:)), "")
         clip.toolTip = "Global shortcut: ⌃⌥V"
         menu.addItem(clip)
+        let find = item("Search Notes…", #selector(searchAction(_:)), "")
+        find.toolTip = "Global shortcut: ⌃⌥F"
+        menu.addItem(find)
         menu.addItem(item(notesHidden ? "Show Notes" : "Hide Notes", #selector(toggleHidden), ""))
         menu.addItem(item("Arrange Notes", #selector(arrangeAll), ""))
         let restore = item("Restore Deleted Note", #selector(restoreDeleted(_:)), "")
@@ -324,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let file = NSMenu(title: "File")
         file.addItem(item("New Note", #selector(newNoteAction(_:)), "n"))
         file.addItem(item("New Note from Clipboard", #selector(newNoteFromClipboardAction(_:)), "v", [.command, .shift]))
+        file.addItem(item("Search Notes…", #selector(searchAction(_:)), "k"))
         file.addItem(item("Export Note as Markdown…", #selector(exportFocused(_:)), "e"))
         file.addItem(item("Delete Note", #selector(deleteFocused(_:)), "w"))
         file.addItem(item("Restore Deleted Note", #selector(restoreDeleted(_:)), "t", [.command, .shift]))

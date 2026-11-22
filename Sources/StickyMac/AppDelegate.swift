@@ -4,12 +4,15 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let store = NoteStore()
-    private var controllers: [UUID: NoteWindowController] = [:]
+    private(set) var controllers: [UUID: NoteWindowController] = [:]
     private var statusItem: NSStatusItem!
     private var hotKeys: [HotKey] = []
     private var notesHidden = false
     private let mirror = MarkdownMirror()
     private lazy var search = SearchController(store: store) { [weak self] id in self?.reveal(id) }
+    private lazy var agentServer = AgentServer { [weak self] req in
+        self?.handleAgentRequest(req) ?? ["ok": false, "error": "app is shutting down"]
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -30,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.load()
         store.notes.forEach { open($0, focus: false) }
         if store.notes.isEmpty { createWelcomeNote() }
+        agentServer.start()
 
         RunLoop.main.add(Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.wakeDueNotes() }, forMode: .common)
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -73,9 +77,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let text = Checklist.fromMarkdown(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        newNote(atMouse: atMouse, text: text, size: fittedSize(for: text))
+    }
+
+    /// A note size that roughly fits the text.
+    func fittedSize(for text: String) -> CGSize {
         let lines = text.components(separatedBy: "\n").count + text.count / 34
-        let height = CGFloat(min(max(160, lines * 21 + 80), 440))
-        newNote(atMouse: atMouse, text: text, size: CGSize(width: 280, height: height))
+        return CGSize(width: 280, height: CGFloat(min(max(160, lines * 21 + 80), 440)))
+    }
+
+    /// New notes cycle through colors so a wall of notes looks lively.
+    var nextColor: NoteColor {
+        let colors = NoteColor.allCases.filter { $0 != .graphite }
+        return colors[store.notes.count % colors.count]
+    }
+
+    @discardableResult
+    func addNote(text: String, color: NoteColor, frame: CGRect, focus: Bool) -> NoteModel {
+        let model = NoteModel(text: text, color: color, frame: frame)
+        model.wantsFocus = focus
+        store.add(model)
+        notesHidden = false
+        open(model, focus: focus)
+        if !focus { controllers[model.id]?.window.orderFrontRegardless() }
+        return model
     }
 
     func newNote(atMouse: Bool, text: String = "", size: CGSize = CGSize(width: 260, height: 240)) {
@@ -91,14 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             origin.x = min(max(origin.x, v.minX + 8), v.maxX - size.width - 8)
             origin.y = min(max(origin.y, v.minY + 8), v.maxY - size.height - 8)
         }
-        // New notes cycle through colors so a wall of notes looks lively.
-        let colors = NoteColor.allCases.filter { $0 != .graphite }
-        let color = colors[store.notes.count % colors.count]
-        let model = NoteModel(text: text, color: color, frame: CGRect(origin: origin, size: size))
-        model.wantsFocus = true
-        store.add(model)
-        notesHidden = false
-        open(model, focus: true)
+        addNote(text: text, color: nextColor, frame: CGRect(origin: origin, size: size), focus: true)
     }
 
     private func createWelcomeNote() {

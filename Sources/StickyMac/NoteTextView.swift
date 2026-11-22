@@ -22,7 +22,8 @@ enum Checklist {
     /// Markdown task lists and bullets → our markers (used for pasted/captured text).
     static func fromMarkdown(_ text: String) -> String {
         text.components(separatedBy: "\n").map { line -> String in
-            for (md, mark) in [("- [ ] ", open), ("* [ ] ", open), ("- [x] ", done), ("- [X] ", done), ("* [x] ", done)]
+            for (md, mark) in [("- [ ] ", open), ("* [ ] ", open), ("- [x] ", done), ("- [X] ", done), ("* [x] ", done),
+                               ("- ", bullet), ("* ", bullet)]
             where line.hasPrefix(md) { return mark + line.dropFirst(md.count) }
             return line
         }.joined(separator: "\n")
@@ -174,8 +175,9 @@ struct NoteTextView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let tv = scroll.documentView as? NoteNSTextView else { return }
         context.coordinator.model = model
-        if tv.string != model.text { tv.string = model.text }
-        context.coordinator.restyle(tv)
+        let changed = tv.string != model.text  // edited from outside (e.g. an agent)
+        if changed { tv.string = model.text }
+        context.coordinator.restyle(tv, force: changed)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {

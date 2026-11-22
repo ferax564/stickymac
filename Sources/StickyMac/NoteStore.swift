@@ -77,12 +77,14 @@ final class NoteStore {
     /// Called after every save (used for the Markdown folder copy).
     var onSave: (([NoteModel]) -> Void)?
 
-    let fileURL: URL = {
+    static let directory: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("StickyMac", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("notes.json")
+        return dir
     }()
+
+    let fileURL = NoteStore.directory.appendingPathComponent("notes.json")
 
     private struct FileFormat: Codable {
         var version = 1

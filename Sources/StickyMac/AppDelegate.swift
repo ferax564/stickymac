@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var hotKeys: [HotKey] = []
     private var notesHidden = false
+    private let mirror = MarkdownMirror()
+    private var snoozeTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -21,9 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
         ].compactMap { $0 }
 
+        store.onSave = { [weak self] notes in self?.mirror.sync(notes) }
         store.load()
         store.notes.forEach { open($0, focus: false) }
         if store.notes.isEmpty { createWelcomeNote() }
+
+        let t = Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.wakeDueNotes() }
+        RunLoop.main.add(t, forMode: .common)
+        snoozeTimer = t
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(wakeDueNotes), name: NSWorkspace.didWakeNotification, object: nil)
+    }
+
+    @objc func wakeDueNotes() {
+        for c in controllers.values where c.model.snoozedUntil != nil && !c.model.isSnoozed {
+            c.wake(focus: false)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) { store.saveNow() }
@@ -41,7 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.store.delete(c.model)
         }
         controllers[model.id] = c
-        c.show(focus: focus)
+        if model.snoozedUntil != nil && !model.isSnoozed { model.snoozedUntil = nil }
+        if !model.isSnoozed { c.show(focus: focus) }
     }
 
     @objc func newNoteAction(_ sender: Any?) { newNote(atMouse: sender is NSStatusBarButton) }
@@ -93,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         • ⌃⌥V → new note from the clipboard
         ☐ Type [] and a space for a checklist
         ☑ Click a box to tick it off
+        • 💤 in the bar snoozes a note until later
         • Drag the top bar to move, edges to resize
         • Double-click the bar to collapse
         • Hover for colors · 📌 floats on top
@@ -124,6 +141,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         c.model.color = NoteColor.allCases[sender.tag]
     }
 
+    @objc func snoozeFocused(_ sender: NSMenuItem) {
+        guard let c = focusedController else { return }
+        c.snooze(until: Snooze.options()[sender.tag].date)
+    }
+
+    @objc func exportFocused(_ sender: Any?) {
+        guard let note = focusedController?.model else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = MarkdownMirror.fileName(for: note)
+            .replacingOccurrences(of: " " + note.id.uuidString.prefix(6), with: "")
+        panel.allowedContentTypes = [.init(filenameExtension: "md")!]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try MarkdownMirror.markdown(for: note).write(to: url, atomically: true, encoding: .utf8) }
+        catch { NSAlert(error: error).runModal() }
+    }
+
+    @objc func chooseMarkdownFolder(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Save Notes Here"
+        panel.message = "StickyMac will keep a Markdown (.md) copy of every note in this folder. Pick a folder in iCloud Drive to have them on all your devices."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        mirror.folder = url
+        mirror.sync(store.notes)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    @objc func stopMarkdownFolder(_ sender: Any?) { mirror.folder = nil }
+
     @objc func togglePin(_ sender: Any?) { focusedController?.model.pinned.toggle() }
     @objc func toggleCollapse(_ sender: Any?) { focusedController?.toggleCollapse() }
     @objc func biggerText(_ sender: Any?) { adjustFont(by: 1) }
@@ -138,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func showAll() {
         notesHidden = false
         NSApp.activate(ignoringOtherApps: true)
-        controllers.values.forEach { $0.window.orderFront(nil) }
+        controllers.values.filter { !$0.model.isSnoozed }.forEach { $0.window.orderFront(nil) }
     }
 
     @objc func hideAll() {
@@ -150,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func arrangeAll() {
         guard let v = NSScreen.main?.visibleFrame else { return }
-        let ordered = store.notes.compactMap { controllers[$0.id] }
+        let ordered = store.notes.filter { !$0.isSnoozed }.compactMap { controllers[$0.id] }
         var x = v.minX + 20, y = v.maxY - 20, rowH: CGFloat = 0
         for c in ordered {
             let f = c.window.frame
@@ -167,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func focusNote(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID, let c = controllers[id] else { return }
         notesHidden = false
-        c.show(focus: true)
+        if c.model.snoozedUntil != nil { c.wake(focus: true) } else { c.show(focus: true) }
     }
 
     @objc func toggleLoginItem(_ sender: Any?) {
@@ -218,7 +267,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !store.notes.isEmpty {
             menu.addItem(.separator())
             for n in store.notes.sorted(by: { $0.modified > $1.modified }).prefix(12) {
-                let mi = item(n.title, #selector(focusNote(_:)), "")
+                let title = n.isSnoozed ? "💤 \(n.title) — until \(Snooze.describe(n.snoozedUntil!))" : n.title
+                let mi = item(title, #selector(focusNote(_:)), "")
                 mi.representedObject = n.id
                 mi.image = swatch(n.color)
                 menu.addItem(mi)
@@ -229,6 +279,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let login = item("Launch at Login", #selector(toggleLoginItem(_:)), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
+        if let folder = mirror.folder {
+            let md = item("Markdown Copies: \(folder.lastPathComponent)", #selector(chooseMarkdownFolder(_:)), "")
+            md.state = .on
+            md.toolTip = folder.path + " (click to change)"
+            menu.addItem(md)
+            menu.addItem(item("Stop Saving Markdown Copies", #selector(stopMarkdownFolder(_:)), ""))
+        } else {
+            menu.addItem(item("Save Markdown Copies to Folder…", #selector(chooseMarkdownFolder(_:)), ""))
+        }
         menu.addItem(item("Show Notes File in Finder", #selector(revealData(_:)), ""))
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit StickyMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -265,6 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let file = NSMenu(title: "File")
         file.addItem(item("New Note", #selector(newNoteAction(_:)), "n"))
         file.addItem(item("New Note from Clipboard", #selector(newNoteFromClipboardAction(_:)), "v", [.command, .shift]))
+        file.addItem(item("Export Note as Markdown…", #selector(exportFocused(_:)), "e"))
         file.addItem(item("Delete Note", #selector(deleteFocused(_:)), "w"))
         file.addItem(item("Restore Deleted Note", #selector(restoreDeleted(_:)), "t", [.command, .shift]))
         addSubmenu(file, "File", to: main)
@@ -300,6 +360,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         note.addItem(.separator())
         note.addItem(item("Pin on Top", #selector(togglePin(_:)), "p", [.command, .shift]))
         note.addItem(item("Collapse / Expand", #selector(toggleCollapse(_:)), "m"))
+        let snoozeMenu = NSMenu(title: "Snooze")
+        for (i, o) in Snooze.options().enumerated() {
+            let mi = item(o.title, #selector(snoozeFocused(_:)), "")
+            mi.tag = i
+            snoozeMenu.addItem(mi)
+        }
+        addSubmenu(snoozeMenu, "Snooze", to: note)
         note.addItem(.separator())
         note.addItem(item("Bigger Text", #selector(biggerText(_:)), "="))
         note.addItem(item("Smaller Text", #selector(smallerText(_:)), "-"))

@@ -4,6 +4,7 @@ import AppKit
 struct NoteActions {
     var delete: () -> Void
     var toggleCollapse: () -> Void
+    var snooze: (Date) -> Void
 }
 
 struct NoteView: View {
@@ -60,6 +61,14 @@ struct NoteView: View {
                 }
             }
             if showControls {
+                HeaderButton(symbol: "moon.zzz", help: "Snooze: hide until later", ink: model.color.ink) {
+                    let menu = NSMenu()
+                    menu.addItem(NSMenuItem(title: "Hide Until…", action: nil, keyEquivalent: ""))
+                    for o in Snooze.options() {
+                        menu.addItem(ClosureMenuItem(o.title) { actions.snooze(o.date) })
+                    }
+                    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+                }
                 HeaderButton(symbol: model.collapsed ? "chevron.down" : "chevron.up",
                              help: model.collapsed ? "Expand" : "Collapse (or double-click the bar)",
                              ink: model.color.ink) { actions.toggleCollapse() }
@@ -167,6 +176,18 @@ struct HeaderButton: View {
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
         .help(help)
     }
+}
+
+/// An NSMenuItem that runs a closure.
+final class ClosureMenuItem: NSMenuItem {
+    private let handler: () -> Void
+    init(_ title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(fire), keyEquivalent: "")
+        target = self
+    }
+    required init(coder: NSCoder) { fatalError("not used") }
+    @objc private func fire() { handler() }
 }
 
 /// An AppKit view that drags the borderless window and reports double-clicks.

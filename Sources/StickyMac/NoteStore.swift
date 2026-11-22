@@ -11,6 +11,7 @@ final class NoteModel: ObservableObject, Identifiable {
     @Published var collapsed: Bool
     @Published var fontSize: Double
     @Published var modified: Date
+    @Published var snoozedUntil: Date?
     var frame: CGRect
     var expandedHeight: CGFloat
     /// Set for freshly created notes so the editor grabs focus.
@@ -33,16 +34,20 @@ final class NoteModel: ObservableObject, Identifiable {
         id = r.id; created = r.created; text = r.text; color = r.color
         pinned = r.pinned; collapsed = r.collapsed; fontSize = r.fontSize
         modified = r.modified; frame = r.frame; expandedHeight = r.expandedHeight
+        snoozedUntil = r.snoozedUntil
     }
 
     var record: NoteRecord {
         NoteRecord(id: id, created: created, modified: modified, text: text, color: color,
                    pinned: pinned, collapsed: collapsed, fontSize: fontSize,
-                   frame: frame, expandedHeight: expandedHeight)
+                   frame: frame, expandedHeight: expandedHeight, snoozedUntil: snoozedUntil)
     }
 
+    var isSnoozed: Bool { (snoozedUntil ?? .distantPast) > Date() }
+
     var title: String {
-        let first = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        var first = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        if [Checklist.open, Checklist.done, Checklist.bullet].contains(where: first.hasPrefix) { first.removeFirst(2) }
         let t = first.trimmingCharacters(in: .whitespaces)
         return t.isEmpty ? "Empty note" : String(t.prefix(40))
     }
@@ -60,6 +65,7 @@ struct NoteRecord: Codable {
     var fontSize: Double
     var frame: CGRect
     var expandedHeight: CGFloat
+    var snoozedUntil: Date?
 }
 
 final class NoteStore {
@@ -68,6 +74,8 @@ final class NoteStore {
     private var subs: [UUID: AnyCancellable] = [:]
     private let saveSubject = PassthroughSubject<Void, Never>()
     private var saveSub: AnyCancellable?
+    /// Called after every save (used for the Markdown folder copy).
+    var onSave: (([NoteModel]) -> Void)?
 
     let fileURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -137,5 +145,6 @@ final class NoteStore {
         let f = FileFormat(notes: notes.map(\.record), trash: trash)
         guard let data = try? enc.encode(f) else { return }
         try? data.write(to: fileURL, options: .atomic)
+        onSave?(notes)
     }
 }

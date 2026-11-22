@@ -36,7 +36,8 @@ final class NoteWindowController: NSObject, NSWindowDelegate {
 
         let actions = NoteActions(
             delete: { [weak self] in self?.delete() },
-            toggleCollapse: { [weak self] in self?.toggleCollapse() }
+            toggleCollapse: { [weak self] in self?.toggleCollapse() },
+            snooze: { [weak self] date in self?.snooze(until: date) }
         )
         let host = NSHostingView(rootView: NoteView(model: model, actions: actions))
         host.sizingOptions = []  // the window decides its size, not SwiftUI
@@ -104,6 +105,30 @@ final class NoteWindowController: NSObject, NSWindowDelegate {
             self.model.frame = self.window.frame
             self.window.invalidateShadow()
         })
+    }
+
+    /// Fade out and stay hidden until the date; AppDelegate's timer wakes it.
+    func snooze(until date: Date) {
+        model.snoozedUntil = date
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            window.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.window.orderOut(nil)
+            self?.window.alphaValue = 1
+        })
+    }
+
+    /// Bring a snoozed note back, in front of whatever app is active.
+    func wake(focus: Bool) {
+        model.snoozedUntil = nil
+        window.alphaValue = 0
+        if focus { show(focus: true) } else { window.orderFrontRegardless() }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.25
+            window.animator().alphaValue = 1
+        }
+        window.invalidateShadow()
     }
 
     func delete() {

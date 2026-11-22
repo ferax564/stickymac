@@ -6,15 +6,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let store = NoteStore()
     private var controllers: [UUID: NoteWindowController] = [:]
     private var statusItem: NSStatusItem!
-    private var hotKey: HotKey?
+    private var hotKeys: [HotKey] = []
     private var notesHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
         buildStatusItem()
-        hotKey = HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey, id: 1) { [weak self] in
-            self?.newNote(atMouse: true)
-        }
+        hotKeys = [
+            HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey, id: 1) { [weak self] in
+                self?.newNote(atMouse: true)
+            },
+            HotKey(keyCode: kVK_ANSI_V, modifiers: controlKey | optionKey, id: 2) { [weak self] in
+                self?.newNoteFromClipboard(atMouse: true)
+            },
+        ].compactMap { $0 }
 
         store.load()
         store.notes.forEach { open($0, focus: false) }
@@ -41,8 +46,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func newNoteAction(_ sender: Any?) { newNote(atMouse: sender is NSStatusBarButton) }
 
-    func newNote(atMouse: Bool) {
-        let size = CGSize(width: 260, height: 240)
+    @objc func newNoteFromClipboardAction(_ sender: Any?) { newNoteFromClipboard(atMouse: false) }
+
+    /// ⌃⌥V: drop whatever text is on the clipboard into a fresh note.
+    func newNoteFromClipboard(atMouse: Bool) {
+        guard let raw = NSPasteboard.general.string(forType: .string),
+              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let text = Checklist.fromMarkdown(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        let lines = text.components(separatedBy: "\n").count + text.count / 34
+        let height = CGFloat(min(max(160, lines * 21 + 80), 440))
+        newNote(atMouse: atMouse, text: text, size: CGSize(width: 280, height: height))
+    }
+
+    func newNote(atMouse: Bool, text: String = "", size: CGSize = CGSize(width: 260, height: 240)) {
         var origin: CGPoint
         if !atMouse, let key = focusedController {
             origin = CGPoint(x: key.window.frame.minX + 28, y: key.window.frame.maxY - 28 - size.height)
@@ -58,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // New notes cycle through colors so a wall of notes looks lively.
         let colors = NoteColor.allCases.filter { $0 != .graphite }
         let color = colors[store.notes.count % colors.count]
-        let model = NoteModel(color: color, frame: CGRect(origin: origin, size: size))
+        let model = NoteModel(text: text, color: color, frame: CGRect(origin: origin, size: size))
         model.wantsFocus = true
         store.add(model)
         notesHidden = false
@@ -71,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         👋 Welcome to StickyMac!
 
         • ⌃⌥N anywhere → new note at your cursor
+        • ⌃⌥V → new note from the clipboard
+        ☐ Type [] and a space for a checklist
+        ☑ Click a box to tick it off
         • Drag the top bar to move, edges to resize
         • Double-click the bar to collapse
         • Hover for colors · 📌 floats on top
@@ -80,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Everything saves automatically.
         """
         let model = NoteModel(text: text, color: .lemon,
-                              frame: CGRect(x: v.maxX - 340, y: v.maxY - 360, width: 300, height: 320))
+                              frame: CGRect(x: v.maxX - 340, y: v.maxY - 420, width: 300, height: 380))
         store.add(model)
         open(model, focus: false)
     }
@@ -184,6 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let new = item("New Note", #selector(newNoteAction(_:)), "")
         new.toolTip = "Global shortcut: ⌃⌥N"
         menu.addItem(new)
+        let clip = item("New Note from Clipboard", #selector(newNoteFromClipboardAction(_:)), "")
+        clip.toolTip = "Global shortcut: ⌃⌥V"
+        menu.addItem(clip)
         menu.addItem(item(notesHidden ? "Show Notes" : "Hide Notes", #selector(toggleHidden), ""))
         menu.addItem(item("Arrange Notes", #selector(arrangeAll), ""))
         let restore = item("Restore Deleted Note", #selector(restoreDeleted(_:)), "")
@@ -239,6 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let file = NSMenu(title: "File")
         file.addItem(item("New Note", #selector(newNoteAction(_:)), "n"))
+        file.addItem(item("New Note from Clipboard", #selector(newNoteFromClipboardAction(_:)), "v", [.command, .shift]))
         file.addItem(item("Delete Note", #selector(deleteFocused(_:)), "w"))
         file.addItem(item("Restore Deleted Note", #selector(restoreDeleted(_:)), "t", [.command, .shift]))
         addSubmenu(file, "File", to: main)
@@ -264,6 +290,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             mi.tag = i
             note.addItem(mi)
         }
+        note.addItem(.separator())
+        let checklist = NSMenuItem(title: "Checklist", action: #selector(NoteNSTextView.toggleChecklist(_:)), keyEquivalent: "l")
+        checklist.keyEquivalentModifierMask = [.command, .shift]
+        note.addItem(checklist)
+        let done = NSMenuItem(title: "Check / Uncheck", action: #selector(NoteNSTextView.toggleDone(_:)), keyEquivalent: "u")
+        done.keyEquivalentModifierMask = [.command, .shift]
+        note.addItem(done)
         note.addItem(.separator())
         note.addItem(item("Pin on Top", #selector(togglePin(_:)), "p", [.command, .shift]))
         note.addItem(item("Collapse / Expand", #selector(toggleCollapse(_:)), "m"))

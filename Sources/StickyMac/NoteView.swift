@@ -10,7 +10,6 @@ struct NoteView: View {
     @ObservedObject var model: NoteModel
     let actions: NoteActions
     @State private var hovering = false
-    @FocusState private var editorFocused: Bool
     @Environment(\.controlActiveState) private var activeState
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14, style: .continuous) }
@@ -32,12 +31,6 @@ struct NoteView: View {
         .overlay(shape.strokeBorder(Color.white.opacity(model.color.isDark ? 0.12 : 0.55), lineWidth: 1))
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
         .animation(.easeInOut(duration: 0.25), value: model.color)
-        .onAppear {
-            if model.wantsFocus {
-                model.wantsFocus = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { editorFocused = true }
-            }
-        }
     }
 
     // MARK: Header
@@ -87,25 +80,18 @@ struct NoteView: View {
     // MARK: Editor
 
     private var editor: some View {
-        TextEditor(text: $model.text)
-            .font(.system(size: model.fontSize, design: .rounded))
-            .foregroundStyle(model.color.ink)
-            .scrollContentBackground(.hidden)
-            .scrollIndicators(.never)
-            .focused($editorFocused)
-            .padding(.horizontal, 8)
-            .padding(.top, 6)
+        NoteTextView(model: model)
+            .padding(.horizontal, 2)
             .overlay(alignment: .topLeading) {
                 if model.text.isEmpty {
                     Text("Write something…")
                         .font(.system(size: model.fontSize, design: .rounded))
                         .foregroundStyle(model.color.ink.opacity(0.35))
-                        .padding(.leading, 13)
+                        .padding(.leading, 15)
                         .padding(.top, 6)
                         .allowsHitTesting(false)
                 }
             }
-            .tint(model.color.isDark ? Color(hex: 0xFFE76B) : model.color.ink)
     }
 
     private var footer: some View {

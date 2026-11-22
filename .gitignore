@@ -1,0 +1,4 @@
+.build/
+build/
+.codixing/
+.DS_Store

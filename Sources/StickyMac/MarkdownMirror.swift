@@ -25,12 +25,12 @@ final class MarkdownMirror {
         Checklist.toMarkdown(note.text).trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 
-    static func fileName(for note: NoteModel) -> String {
+    static func fileName(for note: NoteModel, unique: Bool = true) -> String {
         let bad = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
         var t = note.title.components(separatedBy: bad).joined(separator: " ")
             .trimmingCharacters(in: CharacterSet(charactersIn: " .-*#>"))
         if t.isEmpty || t == "Empty note" { t = "Note" }
-        return String(t.prefix(48)) + " " + note.id.uuidString.prefix(6) + ".md"
+        return String(t.prefix(48)) + (unique ? " " + note.id.uuidString.prefix(6) : "") + ".md"
     }
 
     func sync(_ notes: [NoteModel]) {

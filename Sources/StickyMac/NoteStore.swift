@@ -47,7 +47,7 @@ final class NoteModel: ObservableObject, Identifiable {
 
     var title: String {
         var first = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-        if [Checklist.open, Checklist.done, Checklist.bullet].contains(where: first.hasPrefix) { first.removeFirst(2) }
+        if Checklist.markers.contains(where: first.hasPrefix) { first.removeFirst(2) }
         let t = first.trimmingCharacters(in: .whitespaces)
         return t.isEmpty ? "Empty note" : String(t.prefix(40))
     }

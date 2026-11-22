@@ -6,6 +6,7 @@ enum Checklist {
     static let open = "☐ "
     static let done = "☑ "
     static let bullet = "• "
+    static let markers = [open, done, bullet]
     static let openChar: unichar = 0x2610
     static let doneChar: unichar = 0x2611
 
@@ -207,7 +208,7 @@ struct NoteTextView: NSViewRepresentable {
             let s = tv.string as NSString
             let line = s.lineRange(for: NSRange(location: sel.location, length: 0))
             let text = s.substring(with: line).trimmingCharacters(in: .newlines)
-            guard let prefix = [Checklist.open, Checklist.done, Checklist.bullet].first(where: { text.hasPrefix($0) }),
+            guard let prefix = Checklist.markers.first(where: { text.hasPrefix($0) }),
                   sel.location >= line.location + 2 else { return false }
             if text.dropFirst(2).trimmingCharacters(in: .whitespaces).isEmpty {
                 // Enter on an empty item ends the list.

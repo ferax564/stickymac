@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeys: [HotKey] = []
     private var notesHidden = false
     private let mirror = MarkdownMirror()
-    private var snoozeTimer: Timer?
     private lazy var search = SearchController(store: store) { [weak self] id in self?.reveal(id) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,9 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.notes.forEach { open($0, focus: false) }
         if store.notes.isEmpty { createWelcomeNote() }
 
-        let t = Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.wakeDueNotes() }
-        RunLoop.main.add(t, forMode: .common)
-        snoozeTimer = t
+        RunLoop.main.add(Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.wakeDueNotes() }, forMode: .common)
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(wakeDueNotes), name: NSWorkspace.didWakeNotification, object: nil)
     }
@@ -64,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !model.isSnoozed { c.show(focus: focus) }
     }
 
-    @objc func newNoteAction(_ sender: Any?) { newNote(atMouse: sender is NSStatusBarButton) }
+    @objc func newNoteAction(_ sender: Any?) { newNote(atMouse: false) }
 
     @objc func newNoteFromClipboardAction(_ sender: Any?) { newNoteFromClipboard(atMouse: false) }
 
@@ -154,8 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func exportFocused(_ sender: Any?) {
         guard let note = focusedController?.model else { return }
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = MarkdownMirror.fileName(for: note)
-            .replacingOccurrences(of: " " + note.id.uuidString.prefix(6), with: "")
+        panel.nameFieldStringValue = MarkdownMirror.fileName(for: note, unique: false)
         panel.allowedContentTypes = [.init(filenameExtension: "md")!]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try MarkdownMirror.markdown(for: note).write(to: url, atomically: true, encoding: .utf8) }
@@ -306,17 +302,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(item("Show Notes File in Finder", #selector(revealData(_:)), ""))
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit StickyMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quit)
+        menu.addItem(NSMenuItem(title: "Quit StickyMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func swatch(_ c: NoteColor) -> NSImage {
-        let img = NSImage(size: NSSize(width: 12, height: 12), flipped: false) { r in
+        NSImage(size: NSSize(width: 12, height: 12), flipped: false) { r in
             NSColor(c.bottom).setFill()
             NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3).fill()
             return true
         }
-        return img
     }
 
     private func item(_ title: String, _ sel: Selector, _ key: String, _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {

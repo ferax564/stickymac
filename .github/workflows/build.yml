@@ -32,6 +32,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          shasum -a 256 build/StickyMac.zip | tee build/StickyMac.zip.sha256
+          (cd build && shasum -a 256 StickyMac.zip | tee StickyMac.zip.sha256)
           gh release create "$GITHUB_REF_NAME" build/StickyMac.zip build/StickyMac.zip.sha256 \
             --title "StickyMac $GITHUB_REF_NAME" --notes-file .github/release-notes.md

@@ -22,7 +22,7 @@ Native, tiny (≈2k lines of Swift, zero dependencies), lives in the menu bar, n
 Requires macOS 14 Sonoma or later and the Xcode command line tools (`xcode-select --install`).
 
 ```sh
-git clone https://github.com/<owner>/stickymac.git
+git clone https://github.com/ferax564/stickymac.git
 cd stickymac
 ./build.sh --install   # builds StickyMac.app, copies it to /Applications and launches it
 ```

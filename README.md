@@ -19,7 +19,11 @@ Native, tiny (≈2k lines of Swift, zero dependencies), lives in the menu bar, n
 
 ## Install
 
-Requires macOS 14 Sonoma or later and the Xcode command line tools (`xcode-select --install`).
+Requires macOS 14 Sonoma or later. Runs natively on Apple silicon and Intel Macs.
+
+Download `StickyMac.zip` from the [latest release](https://github.com/ferax564/stickymac/releases/latest), unzip it, and move `StickyMac.app` to Applications. Releases are signed with a Developer ID and notarized by Apple.
+
+To build from source instead, install the Xcode command line tools (`xcode-select --install`):
 
 ```sh
 git clone https://github.com/ferax564/stickymac.git

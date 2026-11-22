@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        migrateLegacyDefaults()
         buildMainMenu()
         buildStatusItem()
         hotKeys = [
@@ -38,6 +39,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RunLoop.main.add(Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.wakeDueNotes() }, forMode: .common)
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(wakeDueNotes), name: NSWorkspace.didWakeNotification, object: nil)
+    }
+
+    /// 1.0.0 shipped with the bundle ID local.stickymac. Copy its settings to the new ID once.
+    private func migrateLegacyDefaults() {
+        let defaults = UserDefaults.standard
+        let doneKey = "migratedLegacyDefaults"
+        guard !defaults.bool(forKey: doneKey), let legacy = UserDefaults(suiteName: "local.stickymac") else { return }
+        for key in ["markdownFolder", "markdownManifest"] where defaults.object(forKey: key) == nil {
+            if let value = legacy.object(forKey: key) { defaults.set(value, forKey: key) }
+        }
+        defaults.set(true, forKey: doneKey)
     }
 
     @objc func wakeDueNotes() {

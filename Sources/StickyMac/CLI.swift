@@ -91,7 +91,7 @@ enum CLI {
         let bundle = exe.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = bundle.pathExtension == "app" ? ["-g", bundle.path] : ["-g", "-b", "local.stickymac"]
+        p.arguments = bundle.pathExtension == "app" ? ["-g", bundle.path] : ["-g", "-b", "com.ferax564.stickymac"]
         try? p.run()
         p.waitUntilExit()
     }
@@ -135,7 +135,7 @@ enum MCPServer {
                 reply(id, [
                     "protocolVersion": params["protocolVersion"] as? String ?? "2025-06-18",
                     "capabilities": ["tools": [:]],
-                    "serverInfo": ["name": "stickymac", "version": "1.0.0"],
+                    "serverInfo": ["name": "stickymac", "version": "1.0.1"],
                     "instructions": "Sticky notes on the user's Mac desktop. Good for leaving the user visible reminders, to-do checklists you tick off as you work, or summaries. Notes appear on screen immediately.",
                 ])
             case "ping":

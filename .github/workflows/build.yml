@@ -1,0 +1,25 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app bundle
+        run: ./build.sh
+      - name: Smoke-test the MCP server
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | build/StickyMac.app/Contents/MacOS/StickyMac mcp | tee out.jsonl
+          grep -q create_note out.jsonl
+      - name: Zip
+        run: cd build && ditto -c -k --keepParent StickyMac.app StickyMac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StickyMac
+          path: build/StickyMac.zip

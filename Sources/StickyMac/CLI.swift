@@ -135,7 +135,7 @@ enum MCPServer {
                 reply(id, [
                     "protocolVersion": params["protocolVersion"] as? String ?? "2025-06-18",
                     "capabilities": ["tools": [:]],
-                    "serverInfo": ["name": "stickymac", "version": "1.1.0"],
+                    "serverInfo": ["name": "stickymac", "version": "1.0.0"],
                     "instructions": "Sticky notes on the user's Mac desktop. Good for leaving the user visible reminders, to-do checklists you tick off as you work, or summaries. Notes appear on screen immediately.",
                 ])
             case "ping":
